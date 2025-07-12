@@ -178,16 +178,25 @@ exec "$@"
                         "source": "XDG_DATA_HOME Steam directory"
                     }
             
-            # Check HOME/.local/share path
+            # Check multiple Steam installation paths
             home_dir = os.getenv("HOME")
             if home_dir and home_dir.strip():
-                dll_path_str = os.path.join(home_dir.strip(), ".local", "share", "Steam", "steamapps", "common", "Lossless Scaling", "Lossless.dll")
-                if os.path.exists(dll_path_str):
-                    return {
-                        "detected": True,
-                        "path": dll_path_str,
-                        "source": "HOME/.local/share Steam directory"
-                    }
+                steam_paths = [
+                    ".local/share/Steam/steamapps/common",
+                    ".steam/steam/steamapps/common",
+                    ".steam/debian-installation/steamapps/common",
+                    ".var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common",
+                    "snap/steam/common/.local/share/Steam/steamapps/common"
+                ]
+                
+                for steam_path in steam_paths:
+                    dll_path_str = os.path.join(home_dir.strip(), steam_path, "Lossless Scaling", "Lossless.dll")
+                    if os.path.exists(dll_path_str):
+                        return {
+                            "detected": True,
+                            "path": dll_path_str,
+                            "source": f"Steam installation at {steam_path}"
+                        }
             
             # DLL not found in any expected location
             return {
