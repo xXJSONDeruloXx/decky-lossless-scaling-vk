@@ -443,36 +443,42 @@ class ConfigurationManager:
         lines.append(f'per_game_profiles = {str(config.get("per_game_profiles", False)).lower()}')
         lines.append("")
         
-        # Add default profile (used when per-game is disabled)
-        lines.append("[[game]]")
-        lines.append("# Default profile (uses LSFG_PROCESS=decky-lsfg-vk)")
-        lines.append('exe = "decky-lsfg-vk"')
-        lines.append("")
-        
-        # Add configuration fields to default profile
-        for field_name, field_def in CONFIG_SCHEMA.items():
-            if field_name == "dll":  # Skip dll field - it's in global
-                continue
-                
-            value = config[field_name]
-            
-            # Add field description comment
-            lines.append(f"# {field_def.description}")
-            
-            # Format value based on type
-            if isinstance(value, bool):
-                lines.append(f"{field_name} = {str(value).lower()}")
-            elif isinstance(value, str) and value:
-                lines.append(f'{field_name} = "{value}"')
-            elif isinstance(value, (int, float)):
-                lines.append(f"{field_name} = {value}")
-            
+        # Check if we already have a "decky-lsfg-vk" profile in game_profiles
+        default_profile_name = "decky-lsfg-vk"
+        if default_profile_name not in game_profiles:
+            # Add default profile (used when per-game is disabled or as fallback)
+            lines.append("[[game]]")
+            lines.append("# Default profile (uses LSFG_PROCESS=decky-lsfg-vk)")
+            lines.append('exe = "decky-lsfg-vk"')
             lines.append("")
+            
+            # Add configuration fields to default profile
+            for field_name, field_def in CONFIG_SCHEMA.items():
+                if field_name == "dll":  # Skip dll field - it's in global
+                    continue
+                    
+                value = config[field_name]
+                
+                # Add field description comment
+                lines.append(f"# {field_def.description}")
+                
+                # Format value based on type
+                if isinstance(value, bool):
+                    lines.append(f"{field_name} = {str(value).lower()}")
+                elif isinstance(value, str) and value:
+                    lines.append(f'{field_name} = "{value}"')
+                elif isinstance(value, (int, float)):
+                    lines.append(f"{field_name} = {value}")
+                
+                lines.append("")
         
         # Add per-game profiles
         for game_name, game_config in game_profiles.items():
             lines.append("[[game]]")
-            lines.append(f"# Profile for {game_name}")
+            if game_name == default_profile_name:
+                lines.append(f"# Default profile (uses LSFG_PROCESS=decky-lsfg-vk)")
+            else:
+                lines.append(f"# Profile for {game_name}")
             lines.append(f'exe = "{game_name}"')
             lines.append("")
             

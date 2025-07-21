@@ -104,8 +104,23 @@ class ConfigurationService(BaseService):
                 experimental_present_mode, dxvk_frame_rate, enable_wow64, disable_steamdeck_mode, per_game_profiles
             )
             
-            # Generate TOML content using centralized manager
-            toml_content = ConfigurationManager.generate_toml_content(config)
+            # Check if we need to handle per-game profiles
+            if per_game_profiles:
+                # Read existing game profiles if file exists
+                global_config = config
+                game_profiles = {}
+                
+                if self.config_file_path.exists():
+                    content = self.config_file_path.read_text(encoding='utf-8')
+                    existing_global, existing_profiles = ConfigurationManager.parse_per_game_toml_content(content)
+                    # Preserve existing game profiles
+                    game_profiles = existing_profiles
+                
+                # Generate per-game TOML content
+                toml_content = ConfigurationManager.generate_per_game_toml_content(global_config, game_profiles)
+            else:
+                # Generate standard TOML content
+                toml_content = ConfigurationManager.generate_toml_content(config)
             
             # Ensure config directory exists
             self.config_dir.mkdir(parents=True, exist_ok=True)
