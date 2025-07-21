@@ -297,9 +297,12 @@ class ConfigurationManager:
                     elif value.startswith("'") and value.endswith("'"):
                         value = value[1:-1]
                     
-                    # Handle global section (dll only)
-                    if in_global_section and key == "dll":
-                        config["dll"] = value
+                    # Handle global section (dll and per_game_profiles)
+                    if in_global_section:
+                        if key == "dll":
+                            config["dll"] = value
+                        elif key == "per_game_profiles":
+                            config["per_game_profiles"] = value.lower() in ('true', '1', 'yes', 'on')
                     
                     # Handle game section
                     elif in_game_section:
