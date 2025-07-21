@@ -4,10 +4,33 @@ Base service class with common functionality.
 
 import os
 import shutil
+import logging
 from pathlib import Path
 from typing import Any, Optional
 
 from .constants import LOCAL_LIB, LOCAL_SHARE_BASE, VULKAN_LAYER_DIR, SCRIPT_NAME, CONFIG_DIR, CONFIG_FILENAME
+
+
+class FallbackLogger:
+    """Fallback logger when decky is not available"""
+    
+    def __init__(self):
+        self._logger = logging.getLogger(__name__)
+        self._logger.setLevel(logging.INFO)
+        if not self._logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self._logger.addHandler(handler)
+    
+    def info(self, msg: str) -> None:
+        self._logger.info(msg)
+    
+    def error(self, msg: str) -> None:
+        self._logger.error(msg)
+    
+    def warning(self, msg: str) -> None:
+        self._logger.warning(msg)
 
 
 class BaseService:
@@ -17,11 +40,15 @@ class BaseService:
         """Initialize base service
         
         Args:
-            logger: Logger instance, defaults to decky.logger if None
+            logger: Logger instance, defaults to decky.logger if None, fallback logger if decky unavailable
         """
         if logger is None:
-            import decky
-            self.log = decky.logger
+            try:
+                import decky
+                self.log = decky.logger
+            except ImportError:
+                # Use fallback logger when decky is not available (e.g., in launch script environment)
+                self.log = FallbackLogger()
         else:
             self.log = logger
             
