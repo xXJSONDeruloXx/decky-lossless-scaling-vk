@@ -84,6 +84,13 @@ export const CONFIG_SCHEMA: Record<string, ConfigField> = {
     fieldType: ConfigFieldType.BOOLEAN,
     default: false,
     description: "disable Steam Deck mode (unlocks hidden settings in some games)"
+  },
+  
+  per_game_profiles: {
+    name: "per_game_profiles",
+    fieldType: ConfigFieldType.BOOLEAN,
+    default: false,
+    description: "enable per-game profiles instead of global configuration"
   }
 };
 
@@ -98,6 +105,7 @@ export interface ConfigurationData {
   dxvk_frame_rate: number;
   enable_wow64: boolean;
   disable_steamdeck_mode: boolean;
+  per_game_profiles: boolean;
 }
 
 // Centralized configuration manager
@@ -134,9 +142,18 @@ export class ConfigurationManager {
    * Create ordered arguments array from configuration object
    */
   static createArgsFromConfig(config: ConfigurationData): (boolean | number | string)[] {
-    return this.getFieldNames().map(fieldName => 
-      config[fieldName as keyof ConfigurationData]
-    );
+    return [
+      config.dll,
+      config.multiplier,
+      config.flow_scale,
+      config.performance_mode,
+      config.hdr_mode,
+      config.experimental_present_mode,
+      config.dxvk_frame_rate,
+      config.enable_wow64,
+      config.disable_steamdeck_mode,
+      config.per_game_profiles
+    ];
   }
 
   /**

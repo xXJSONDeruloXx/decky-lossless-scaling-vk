@@ -29,6 +29,15 @@ export function ConfigurationSection({
       </PanelSectionRow>
 
       <PanelSectionRow>
+        <ToggleField
+          label="Per-Game Profiles"
+          description="Enable different settings for each game instead of global configuration (requires game restart)"
+          checked={config.per_game_profiles}
+          onChange={(value) => onConfigChange('per_game_profiles', value)}
+        />
+      </PanelSectionRow>
+
+      <PanelSectionRow>
         <SliderField
           label="FPS Multiplier"
           description="Traditional FPS multiplier value"

@@ -108,6 +108,19 @@ SCRIPT_ONLY_FIELDS = {
 # Complete configuration schema (TOML + script-only fields)
 COMPLETE_CONFIG_SCHEMA = {**CONFIG_SCHEMA, **SCRIPT_ONLY_FIELDS}
 
+# Per-game profile fields
+PER_GAME_FIELDS = {
+    "per_game_profiles": ConfigField(
+        name="per_game_profiles",
+        field_type=ConfigFieldType.BOOLEAN,
+        default=False,
+        description="enable per-game profiles instead of global configuration"
+    )
+}
+
+# Complete schema including per-game fields
+FULL_CONFIG_SCHEMA = {**COMPLETE_CONFIG_SCHEMA, **PER_GAME_FIELDS}
+
 
 class ConfigurationData(TypedDict):
     """Type-safe configuration data structure"""
@@ -120,6 +133,7 @@ class ConfigurationData(TypedDict):
     dxvk_frame_rate: int
     enable_wow64: bool
     disable_steamdeck_mode: bool
+    per_game_profiles: bool
 
 
 class ConfigurationManager:
@@ -130,7 +144,7 @@ class ConfigurationManager:
         """Get default configuration values"""
         return cast(ConfigurationData, {
             field.name: field.default 
-            for field in COMPLETE_CONFIG_SCHEMA.values()
+            for field in FULL_CONFIG_SCHEMA.values()
         })
     
     @staticmethod
@@ -164,14 +178,14 @@ class ConfigurationManager:
     @staticmethod
     def get_field_names() -> list[str]:
         """Get ordered list of configuration field names"""
-        return list(COMPLETE_CONFIG_SCHEMA.keys())
+        return list(FULL_CONFIG_SCHEMA.keys())
     
     @staticmethod
     def get_field_types() -> Dict[str, ConfigFieldType]:
         """Get field type mapping"""
         return {
             field.name: field.field_type 
-            for field in CONFIG_SCHEMA.values()
+            for field in FULL_CONFIG_SCHEMA.values()
         }
     
     @staticmethod
@@ -179,7 +193,7 @@ class ConfigurationManager:
         """Validate and convert configuration data"""
         validated = {}
         
-        for field_name, field_def in COMPLETE_CONFIG_SCHEMA.items():
+        for field_name, field_def in FULL_CONFIG_SCHEMA.items():
             value = config.get(field_name, field_def.default)
             
             # Type validation and conversion
@@ -388,7 +402,8 @@ class ConfigurationManager:
                                experimental_present_mode: str = "fifo", 
                                dxvk_frame_rate: int = 0,
                                enable_wow64: bool = False,
-                               disable_steamdeck_mode: bool = False) -> ConfigurationData:
+                               disable_steamdeck_mode: bool = False,
+                               per_game_profiles: bool = False) -> ConfigurationData:
         """Create configuration from individual arguments"""
         return cast(ConfigurationData, {
             "dll": dll,
@@ -399,5 +414,185 @@ class ConfigurationManager:
             "experimental_present_mode": experimental_present_mode,
             "dxvk_frame_rate": dxvk_frame_rate,
             "enable_wow64": enable_wow64,
-            "disable_steamdeck_mode": disable_steamdeck_mode
+            "disable_steamdeck_mode": disable_steamdeck_mode,
+            "per_game_profiles": per_game_profiles
         })
+
+    @staticmethod
+    def generate_per_game_toml_content(config: ConfigurationData, game_profiles: Dict[str, ConfigurationData]) -> str:
+        """Generate TOML configuration file content with per-game profiles
+        
+        Args:
+            config: Global configuration (used for defaults and DLL path)
+            game_profiles: Dict mapping game names to their configurations
+            
+        Returns:
+            Complete TOML content with global and per-game sections
+        """
+        lines = ["version = 1"]
+        lines.append("")
+        
+        # Add global section with DLL path and per-game toggle
+        lines.append("[global]")
+        lines.append("# Global settings")
+        if config.get("dll"):
+            lines.append(f"# specify where Lossless.dll is stored")
+            lines.append(f'dll = "{config["dll"]}"')
+        
+        lines.append(f"# Enable per-game profiles")
+        lines.append(f'per_game_profiles = {str(config.get("per_game_profiles", False)).lower()}')
+        lines.append("")
+        
+        # Add default profile (used when per-game is disabled)
+        lines.append("[[game]]")
+        lines.append("# Default profile (uses LSFG_PROCESS=decky-lsfg-vk)")
+        lines.append('exe = "decky-lsfg-vk"')
+        lines.append("")
+        
+        # Add configuration fields to default profile
+        for field_name, field_def in CONFIG_SCHEMA.items():
+            if field_name == "dll":  # Skip dll field - it's in global
+                continue
+                
+            value = config[field_name]
+            
+            # Add field description comment
+            lines.append(f"# {field_def.description}")
+            
+            # Format value based on type
+            if isinstance(value, bool):
+                lines.append(f"{field_name} = {str(value).lower()}")
+            elif isinstance(value, str) and value:
+                lines.append(f'{field_name} = "{value}"')
+            elif isinstance(value, (int, float)):
+                lines.append(f"{field_name} = {value}")
+            
+            lines.append("")
+        
+        # Add per-game profiles
+        for game_name, game_config in game_profiles.items():
+            lines.append("[[game]]")
+            lines.append(f"# Profile for {game_name}")
+            lines.append(f'exe = "{game_name}"')
+            lines.append("")
+            
+            # Add configuration fields to game profile
+            for field_name, field_def in CONFIG_SCHEMA.items():
+                if field_name == "dll":  # Skip dll field - it's in global
+                    continue
+                    
+                value = game_config[field_name]
+                
+                # Add field description comment
+                lines.append(f"# {field_def.description}")
+                
+                # Format value based on type
+                if isinstance(value, bool):
+                    lines.append(f"{field_name} = {str(value).lower()}")
+                elif isinstance(value, str) and value:
+                    lines.append(f'{field_name} = "{value}"')
+                elif isinstance(value, (int, float)):
+                    lines.append(f"{field_name} = {value}")
+                
+                lines.append("")
+        
+        return "\n".join(lines)
+
+    @staticmethod 
+    def parse_per_game_toml_content(content: str) -> tuple[ConfigurationData, Dict[str, ConfigurationData]]:
+        """Parse TOML content with per-game profiles
+        
+        Args:
+            content: TOML file content
+            
+        Returns:
+            Tuple of (global_config, game_profiles_dict)
+        """
+        global_config = ConfigurationManager.get_defaults()
+        game_profiles = {}
+        
+        try:
+            lines = content.split('\n')
+            in_global_section = False
+            in_game_section = False
+            current_game_exe = None
+            current_game_config = None
+            
+            for line in lines:
+                line = line.strip()
+                
+                # Skip comments and empty lines
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Check for section headers
+                if line.startswith('[') and line.endswith(']'):
+                    # Save previous game profile if it exists
+                    if in_game_section and current_game_exe and current_game_config:
+                        game_profiles[current_game_exe] = current_game_config
+                    
+                    if line == '[global]':
+                        in_global_section = True
+                        in_game_section = False
+                        current_game_exe = None
+                        current_game_config = None
+                    elif line == '[[game]]':
+                        in_global_section = False
+                        in_game_section = True
+                        current_game_exe = None
+                        current_game_config = ConfigurationManager.get_defaults()
+                    else:
+                        in_global_section = False
+                        in_game_section = False
+                        current_game_exe = None
+                        current_game_config = None
+                    continue
+                
+                # Parse key = value lines
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    
+                    # Remove quotes from string values
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    elif value.startswith("'") and value.endswith("'"):
+                        value = value[1:-1]
+                    
+                    # Handle global section
+                    if in_global_section:
+                        if key == "dll":
+                            global_config["dll"] = value
+                        elif key == "per_game_profiles":
+                            global_config["per_game_profiles"] = value.lower() == "true"
+                    
+                    # Handle game section
+                    elif in_game_section and current_game_config is not None:
+                        if key == "exe":
+                            current_game_exe = value
+                        else:
+                            # Parse configuration field if it exists in schema
+                            if key in CONFIG_SCHEMA:
+                                field_def = CONFIG_SCHEMA[key]
+                                try:
+                                    if field_def.field_type == ConfigFieldType.BOOLEAN:
+                                        current_game_config[key] = value.lower() == "true"
+                                    elif field_def.field_type == ConfigFieldType.INTEGER:
+                                        current_game_config[key] = int(value)
+                                    elif field_def.field_type == ConfigFieldType.FLOAT:
+                                        current_game_config[key] = float(value)
+                                    else:  # STRING
+                                        current_game_config[key] = value
+                                except (ValueError, TypeError):
+                                    # Use default if parsing fails
+                                    current_game_config[key] = field_def.default
+            
+            # Save the last game profile if it exists
+            if in_game_section and current_game_exe and current_game_config:
+                game_profiles[current_game_exe] = current_game_config
+            
+        except Exception as e:
+            print(f"Error parsing per-game TOML content: {e}")
+        
+        return global_config, game_profiles

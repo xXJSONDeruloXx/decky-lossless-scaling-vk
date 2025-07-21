@@ -17,6 +17,7 @@ from pathlib import Path
 from .installation import InstallationService
 from .dll_detection import DllDetectionService
 from .configuration import ConfigurationService
+from .process_detection import ProcessDetectionService
 from .config_schema import ConfigurationManager
 
 
@@ -35,6 +36,7 @@ class Plugin:
         self.installation_service = InstallationService()
         self.dll_detection_service = DllDetectionService()
         self.configuration_service = ConfigurationService()
+        self.process_detection_service = ProcessDetectionService()
 
     # Installation methods
     async def install_lsfg_vk(self) -> Dict[str, Any]:
@@ -189,7 +191,8 @@ class Plugin:
                           experimental_present_mode: str = "fifo", 
                           dxvk_frame_rate: int = 0,
                           enable_wow64: bool = False,
-                          disable_steamdeck_mode: bool = False) -> Dict[str, Any]:
+                          disable_steamdeck_mode: bool = False,
+                          per_game_profiles: bool = False) -> Dict[str, Any]:
         """Update lsfg TOML configuration
         
         Args:
@@ -202,13 +205,14 @@ class Plugin:
             dxvk_frame_rate: Frame rate cap for DirectX games, before frame multiplier (0 = disabled)
             enable_wow64: Whether to enable PROTON_USE_WOW64=1 for 32-bit games
             disable_steamdeck_mode: Whether to disable Steam Deck mode
+            per_game_profiles: Whether to enable per-game profiles
             
         Returns:
             ConfigurationResponse dict with success status
         """
         return self.configuration_service.update_config(
             dll, multiplier, flow_scale, performance_mode, hdr_mode,
-            experimental_present_mode, dxvk_frame_rate, enable_wow64, disable_steamdeck_mode
+            experimental_present_mode, dxvk_frame_rate, enable_wow64, disable_steamdeck_mode, per_game_profiles
         )
 
     async def update_dll_path(self, dll_path: str) -> Dict[str, Any]:
@@ -492,6 +496,98 @@ class Plugin:
                 "path": str(script_path) if 'script_path' in locals() else "unknown",
                 "error": f"Error reading launch script: {str(e)}"
             }
+
+    # Per-game profile methods
+    async def get_game_profile(self, game_name: str) -> Dict[str, Any]:
+        """Get configuration for a specific game profile
+        
+        Args:
+            game_name: Name of the game profile to retrieve
+            
+        Returns:
+            ConfigurationResponse dict with the game's configuration
+        """
+        return self.configuration_service.get_game_profile(game_name)
+
+    async def update_game_profile(self, game_name: str, dll: str, multiplier: int, flow_scale: float, 
+                                 performance_mode: bool, hdr_mode: bool, 
+                                 experimental_present_mode: str = "fifo", 
+                                 dxvk_frame_rate: int = 0,
+                                 enable_wow64: bool = False,
+                                 disable_steamdeck_mode: bool = False,
+                                 per_game_profiles: bool = False) -> Dict[str, Any]:
+        """Update configuration for a specific game profile
+        
+        Args:
+            game_name: Name of the game profile to update
+            dll: Path to Lossless.dll
+            multiplier: LSFG multiplier value
+            flow_scale: LSFG flow scale value
+            performance_mode: Whether to enable performance mode
+            hdr_mode: Whether to enable HDR mode
+            experimental_present_mode: Experimental Vulkan present mode override
+            dxvk_frame_rate: Frame rate cap for DirectX games, before frame multiplier (0 = disabled)
+            enable_wow64: Whether to enable PROTON_USE_WOW64=1 for 32-bit games
+            disable_steamdeck_mode: Whether to disable Steam Deck mode
+            per_game_profiles: Whether to enable per-game profiles
+            
+        Returns:
+            ConfigurationResponse dict with success status
+        """
+        # Create configuration from individual arguments
+        config = ConfigurationManager.create_config_from_args(
+            dll, multiplier, flow_scale, performance_mode, hdr_mode,
+            experimental_present_mode, dxvk_frame_rate, enable_wow64, disable_steamdeck_mode, per_game_profiles
+        )
+        
+        return self.configuration_service.update_game_profile(game_name, config)
+
+    async def list_game_profiles(self) -> Dict[str, Any]:
+        """List all available game profiles
+        
+        Returns:
+            Dict containing list of game profiles and global config
+        """
+        return self.configuration_service.list_game_profiles()
+
+    # Process detection methods
+    async def get_running_processes(self) -> Dict[str, Any]:
+        """Get information about currently running processes
+        
+        Returns:
+            Dict containing process information and matching details
+        """
+        return self.process_detection_service.get_running_processes()
+
+    async def get_last_launch_info(self) -> Dict[str, Any]:
+        """Get information about the last game launch from system logs
+        
+        Returns:
+            Dict containing last launch command and extracted basename
+        """
+        return self.process_detection_service.get_last_launch_info()
+
+    async def parse_launch_command_basename(self, launch_command: str) -> Dict[str, Any]:
+        """Extract the base executable name from a launch command
+        
+        Args:
+            launch_command: The full launch command from logs
+            
+        Returns:
+            Dict containing the parsed basename and sanitized profile name
+        """
+        basename = self.process_detection_service.parse_launch_command_basename(launch_command)
+        profile_name = None
+        
+        if basename:
+            profile_name = self.process_detection_service.sanitize_profile_name(basename)
+        
+        return {
+            "success": True,
+            "basename": basename,
+            "profile_name": profile_name,
+            "error": None
+        }
 
     # Lifecycle methods
     async def _main(self):

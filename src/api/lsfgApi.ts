@@ -74,6 +74,47 @@ export interface UpdateDownloadResult {
   error?: string;
 }
 
+export interface GameProfilesResult {
+  success: boolean;
+  global_config?: ConfigurationData;
+  game_profiles?: Record<string, ConfigurationData>;
+  message?: string;
+  error?: string;
+}
+
+export interface ProcessInfoResult {
+  success: boolean;
+  processes?: Array<{
+    pid: string;
+    ppid: string;
+    comm: string;
+    args: string;
+  }>;
+  lsfg_processes?: Array<{
+    pid: string;
+    ppid: string;
+    comm: string;
+    args: string;
+  }>;
+  total_processes?: number;
+  error?: string;
+}
+
+export interface LaunchInfoResult {
+  success: boolean;
+  last_launch_command?: string;
+  last_basename?: string;
+  recent_basenames?: string[];
+  error?: string;
+}
+
+export interface ParseBasenameResult {
+  success: boolean;
+  basename?: string;
+  profile_name?: string;
+  error?: string;
+}
+
 export interface LaunchOptionResult {
   launch_option: string;
   instructions: string;
@@ -101,16 +142,29 @@ export const getLaunchScriptContent = callable<[], FileContentResult>("get_launc
 
 // Updated config function using centralized configuration
 export const updateLsfgConfig = callable<
-  [string, number, number, boolean, boolean, string, number, boolean, boolean],
+  [string, number, number, boolean, boolean, string, number, boolean, boolean, boolean],
   ConfigUpdateResult
 >("update_lsfg_config");
 
 // Helper function to create config update from configuration object
 export const updateLsfgConfigFromObject = async (config: ConfigurationData): Promise<ConfigUpdateResult> => {
   const args = ConfigurationManager.createArgsFromConfig(config);
-  return updateLsfgConfig(...args as [string, number, number, boolean, boolean, string, number, boolean, boolean]);
+  return updateLsfgConfig(...args as [string, number, number, boolean, boolean, string, number, boolean, boolean, boolean]);
 };
 
 // Self-updater API functions
 export const checkForPluginUpdate = callable<[], UpdateCheckResult>("check_for_plugin_update");
 export const downloadPluginUpdate = callable<[string], UpdateDownloadResult>("download_plugin_update");
+
+// Per-game profile API functions
+export const getGameProfile = callable<[string], ConfigResult>("get_game_profile");
+export const updateGameProfile = callable<
+  [string, string, number, number, boolean, boolean, string, number, boolean, boolean, boolean],
+  ConfigUpdateResult
+>("update_game_profile");
+export const listGameProfiles = callable<[], GameProfilesResult>("list_game_profiles");
+
+// Process detection API functions  
+export const getRunningProcesses = callable<[], ProcessInfoResult>("get_running_processes");
+export const getLastLaunchInfo = callable<[], LaunchInfoResult>("get_last_launch_info");
+export const parseLaunchCommandBasename = callable<[string], ParseBasenameResult>("parse_launch_command_basename");
