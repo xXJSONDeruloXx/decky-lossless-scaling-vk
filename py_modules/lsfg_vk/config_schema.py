@@ -219,8 +219,14 @@ class ConfigurationManager:
         # Add global section with DLL path only (if specified)
         if config.get("dll"):
             lines.append("[global]")
+            lines.append("# Global settings")
             lines.append(f"# specify where Lossless.dll is stored")
             lines.append(f'dll = "{config["dll"]}"')
+            # Always comment out per_game_profiles to avoid lsfg-vk component conflicts
+            # but still track the state internally in the plugin
+            per_game_enabled = config.get("per_game_profiles", False)
+            lines.append(f"# Enable per-game profiles")
+            lines.append(f'# per_game_profiles = {str(per_game_enabled).lower()}')
             lines.append("")
         
         # Add game section with process name for LSFG_PROCESS approach
@@ -267,7 +273,20 @@ class ConfigurationManager:
             for line in lines:
                 line = line.strip()
                 
-                # Skip comments and empty lines
+                # Handle per_game_profiles specially - parse both commented and uncommented versions
+                # This allows the plugin to track the state even when commented out for lsfg-vk compatibility
+                if line.startswith('# per_game_profiles =') or line.startswith('per_game_profiles ='):
+                    # Extract the value whether it's commented or not
+                    if line.startswith('# per_game_profiles ='):
+                        value_part = line[len('# per_game_profiles ='):].strip()
+                    else:
+                        value_part = line[len('per_game_profiles ='):].strip()
+                    
+                    # Parse the boolean value
+                    config["per_game_profiles"] = value_part.lower() in ('true', '1', 'yes', 'on')
+                    continue
+                
+                # Skip comments and empty lines for regular parsing
                 if not line or line.startswith('#'):
                     continue
                 
@@ -297,12 +316,10 @@ class ConfigurationManager:
                     elif value.startswith("'") and value.endswith("'"):
                         value = value[1:-1]
                     
-                    # Handle global section (dll and per_game_profiles)
+                    # Handle global section (dll only - per_game_profiles handled above)
                     if in_global_section:
                         if key == "dll":
                             config["dll"] = value
-                        elif key == "per_game_profiles":
-                            config["per_game_profiles"] = value.lower() in ('true', '1', 'yes', 'on')
                     
                     # Handle game section
                     elif in_game_section:
@@ -442,8 +459,11 @@ class ConfigurationManager:
             lines.append(f"# specify where Lossless.dll is stored")
             lines.append(f'dll = "{config["dll"]}"')
         
+        # Always comment out per_game_profiles to avoid lsfg-vk component conflicts
+        # but still track the state internally in the plugin
+        per_game_enabled = config.get("per_game_profiles", False)
         lines.append(f"# Enable per-game profiles")
-        lines.append(f'per_game_profiles = {str(config.get("per_game_profiles", False)).lower()}')
+        lines.append(f'# per_game_profiles = {str(per_game_enabled).lower()}')
         lines.append("")
         
         # Check if we already have a "decky-lsfg-vk" profile in game_profiles
@@ -530,7 +550,20 @@ class ConfigurationManager:
             for line in lines:
                 line = line.strip()
                 
-                # Skip comments and empty lines
+                # Handle per_game_profiles specially - parse both commented and uncommented versions
+                # This allows the plugin to track the state even when commented out for lsfg-vk compatibility
+                if line.startswith('# per_game_profiles =') or line.startswith('per_game_profiles ='):
+                    # Extract the value whether it's commented or not
+                    if line.startswith('# per_game_profiles ='):
+                        value_part = line[len('# per_game_profiles ='):].strip()
+                    else:
+                        value_part = line[len('per_game_profiles ='):].strip()
+                    
+                    # Parse the boolean value
+                    global_config["per_game_profiles"] = value_part.lower() in ('true', '1', 'yes', 'on')
+                    continue
+                
+                # Skip comments and empty lines for regular parsing
                 if not line or line.startswith('#'):
                     continue
                 
@@ -569,12 +602,10 @@ class ConfigurationManager:
                     elif value.startswith("'") and value.endswith("'"):
                         value = value[1:-1]
                     
-                    # Handle global section
+                    # Handle global section (dll only - per_game_profiles handled above)
                     if in_global_section:
                         if key == "dll":
                             global_config["dll"] = value
-                        elif key == "per_game_profiles":
-                            global_config["per_game_profiles"] = value.lower() == "true"
                     
                     # Handle game section
                     elif in_game_section and current_game_config is not None:

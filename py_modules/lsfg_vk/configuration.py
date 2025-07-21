@@ -115,6 +115,77 @@ class ConfigurationService(BaseService):
                     existing_global, existing_profiles = ConfigurationManager.parse_per_game_toml_content(content)
                     # Preserve existing game profiles
                     game_profiles = existing_profiles
+                    
+                    # Try to determine which profile is currently active by checking running processes
+                    try:
+                        self.log.info("=== Per-game profile detection starting ===")
+                        self.log.info(f"Available game profiles: {list(game_profiles.keys())}")
+                        
+                        from .process_detection import ProcessDetectionService
+                        process_service = ProcessDetectionService(self.log)
+                        
+                        # Use the dedicated method to get current active profile
+                        current_profile = process_service.get_current_active_profile()
+                        
+                        if current_profile:
+                            # Validate that the profile exists in our config
+                            if current_profile in game_profiles:
+                                self.log.info(f"=== Found valid active profile: {current_profile} ===")
+                            else:
+                                self.log.warning(f"Profile '{current_profile}' found in process but not in config file, treating as no active profile")
+                                current_profile = None
+                        
+                        # If the direct method didn't work, fall back to the older approach
+                        if not current_profile:
+                            self.log.info("Primary detection failed, trying fallback methods...")
+                            running_processes = process_service.get_running_processes()
+                            
+                            # Look for processes with LSFG_PROCESS environment variable
+                            # First check for lsfg processes that have LSFG_PROCESS set
+                            for proc_info in running_processes.get('lsfg_processes', []):
+                                args = proc_info.get('args', '')
+                                if 'LSFG_PROCESS=' in args:
+                                    # Extract the profile name from LSFG_PROCESS=profile_name
+                                    import re
+                                    match = re.search(r'LSFG_PROCESS=([^\s]+)', args)
+                                    if match:
+                                        profile_name = match.group(1).strip('"\'')
+                                        if profile_name in game_profiles and profile_name != 'decky-lsfg-vk':
+                                            current_profile = profile_name
+                                            self.log.info(f"Found active profile from LSFG_PROCESS fallback: {current_profile}")
+                                            break
+                            
+                            # Fallback: look for .exe processes that might have corresponding profiles
+                            if not current_profile:
+                                self.log.info("Trying exe-based fallback detection...")
+                                for proc_info in running_processes.get('processes', []):
+                                    if proc_info.get('name', '').endswith('.exe'):
+                                        # Convert exe name to profile name format
+                                        exe_name = proc_info['name']
+                                        profile_name = exe_name[:-4].replace(' ', '-').lower()  # Remove .exe and normalize
+                                        profile_name = ''.join(c if c.isalnum() or c in '-_' else '-' for c in profile_name)
+                                        
+                                        if profile_name in game_profiles:
+                                            current_profile = profile_name
+                                            self.log.info(f"Found active profile from exe process fallback: {current_profile}")
+                                            break
+                        
+                        # Update only the currently active profile with the new settings
+                        if current_profile:
+                            self.log.info(f"=== Updating active profile '{current_profile}' ===")
+                            updated_profile = dict(game_profiles[current_profile])
+                            # Apply all the new settings from the global config (except dll which stays global)
+                            for key, value in config.items():
+                                if key != "dll":  # dll stays in global section
+                                    updated_profile[key] = value
+                            game_profiles[current_profile] = ConfigurationManager.validate_config(updated_profile)
+                            self.log.info(f"Updated active profile '{current_profile}' with new settings: multiplier={config.get('multiplier')}, flow_scale={config.get('flow_scale')}")
+                        else:
+                            self.log.info("=== No active game profile detected, updating global config only ===")
+                            self.log.info("This means changes will apply to newly launched games but not currently running games")
+                            
+                    except Exception as e:
+                        self.log.warning(f"Could not detect active profile: {e}, updating global config only")
                 
                 # Generate per-game TOML content
                 toml_content = ConfigurationManager.generate_per_game_toml_content(global_config, game_profiles)

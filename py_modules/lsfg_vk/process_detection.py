@@ -212,3 +212,92 @@ class ProcessDetectionService(BaseService):
                 "recent_basenames": [],
                 "error": error_msg
             }
+
+    def get_current_active_profile(self) -> Optional[str]:
+        """Get the currently active game profile by checking LSFG_PROCESS environment variable
+        
+        Based on lsfg-vk documentation: look for processes using Vulkan with LSFG_PROCESS set
+        
+        Returns:
+            The active profile name or None if not found
+        """
+        try:
+            self.log.info("Searching for active game profile...")
+            
+            # Look through all processes owned by current user that have Vulkan maps
+            import os
+            current_user = os.getenv('USER', 'unknown')
+            
+            vulkan_processes = []
+            
+            # Scan /proc for processes with Vulkan maps (lsfg-vk is a Vulkan layer)
+            for proc_dir in Path('/proc').glob('[0-9]*'):
+                try:
+                    pid = proc_dir.name
+                    
+                    # Check if this process is owned by current user
+                    stat_result = subprocess.run(['stat', '-c', '%U', str(proc_dir)], 
+                                               capture_output=True, text=True)
+                    if stat_result.returncode != 0 or stat_result.stdout.strip() != current_user:
+                        continue
+                    
+                    # Check if process has Vulkan maps (indicating it's using Vulkan)
+                    maps_file = proc_dir / 'maps'
+                    if maps_file.exists():
+                        try:
+                            with open(maps_file, 'r') as f:
+                                maps_content = f.read()
+                                if 'vulkan' in maps_content.lower():
+                                    # Get process name
+                                    comm_file = proc_dir / 'comm'
+                                    if comm_file.exists():
+                                        proc_name = comm_file.read_text().strip()
+                                        vulkan_processes.append({
+                                            'pid': pid,
+                                            'name': proc_name,
+                                            'proc_dir': proc_dir
+                                        })
+                        except (PermissionError, FileNotFoundError, OSError):
+                            continue
+                            
+                except (ValueError, PermissionError, FileNotFoundError, OSError):
+                    continue
+            
+            self.log.info(f"Found {len(vulkan_processes)} Vulkan processes")
+            for proc in vulkan_processes:
+                self.log.info(f"  Vulkan process: PID {proc['pid']} - {proc['name']}")
+            
+            # Now check environment variables of Vulkan processes for LSFG_PROCESS
+            for proc_info in vulkan_processes:
+                try:
+                    environ_file = proc_info['proc_dir'] / 'environ'
+                    if environ_file.exists():
+                        with open(environ_file, 'rb') as f:
+                            environ_data = f.read().decode('utf-8', errors='ignore')
+                            env_vars = environ_data.split('\0')
+                            
+                            # Log some environment variables for debugging
+                            lsfg_vars = [var for var in env_vars if 'LSFG' in var or 'lsfg' in var.lower()]
+                            if lsfg_vars:
+                                self.log.info(f"  Process {proc_info['pid']} has LSFG-related env vars: {lsfg_vars}")
+                            
+                            for env_var in env_vars:
+                                if env_var.startswith('LSFG_PROCESS='):
+                                    profile_name = env_var.split('=', 1)[1]
+                                    self.log.info(f"  Process {proc_info['pid']} has LSFG_PROCESS={profile_name}")
+                                    # Skip the default profile
+                                    if profile_name and profile_name != 'decky-lsfg-vk':
+                                        self.log.info(f"Found active profile '{profile_name}' from Vulkan process {proc_info['pid']} ({proc_info['name']})")
+                                        return profile_name
+                                    else:
+                                        self.log.info(f"Found default profile in process {proc_info['pid']} ({proc_info['name']}), continuing search...")
+                except (PermissionError, FileNotFoundError, OSError) as e:
+                    self.log.info(f"Could not read environment for process {proc_info['pid']}: {e}")
+                    continue
+            
+            self.log.info("No active game profile found in Vulkan processes")
+            return None
+            
+        except Exception as e:
+            self.log.warning(f"Failed to get current active profile: {str(e)}")
+            return None
