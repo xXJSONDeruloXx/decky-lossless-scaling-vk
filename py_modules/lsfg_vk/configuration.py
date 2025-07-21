@@ -170,22 +170,37 @@ class ConfigurationService(BaseService):
                                             self.log.info(f"Found active profile from exe process fallback: {current_profile}")
                                             break
                         
-                        # Update only the currently active profile with the new settings
-                        if current_profile:
-                            self.log.info(f"=== Updating active profile '{current_profile}' ===")
+                        # ALWAYS update the default profile (decky-lsfg-vk) to reflect current UI state
+                        self.log.info("=== Updating default profile (decky-lsfg-vk) with UI changes ===")
+                        default_profile_config = dict(config)  # Copy the new settings
+                        # Remove global-only settings from the profile
+                        for global_key in ["dll", "per_game_profiles"]:
+                            default_profile_config.pop(global_key, None)
+                        game_profiles["decky-lsfg-vk"] = ConfigurationManager.validate_config(default_profile_config)
+                        self.log.info(f"Updated default profile with: multiplier={config.get('multiplier')}, flow_scale={config.get('flow_scale')}")
+                        
+                        # ALSO update the currently active profile if one is detected
+                        if current_profile and current_profile != "decky-lsfg-vk":
+                            self.log.info(f"=== ALSO updating active profile '{current_profile}' ===")
                             updated_profile = dict(game_profiles[current_profile])
                             # Apply all the new settings from the global config (except dll which stays global)
                             for key, value in config.items():
-                                if key != "dll":  # dll stays in global section
+                                if key not in ["dll", "per_game_profiles"]:  # These stay in global section
                                     updated_profile[key] = value
                             game_profiles[current_profile] = ConfigurationManager.validate_config(updated_profile)
                             self.log.info(f"Updated active profile '{current_profile}' with new settings: multiplier={config.get('multiplier')}, flow_scale={config.get('flow_scale')}")
+                        elif current_profile == "decky-lsfg-vk":
+                            self.log.info("Active profile is the default profile (already updated above)")
                         else:
-                            self.log.info("=== No active game profile detected, updating global config only ===")
-                            self.log.info("This means changes will apply to newly launched games but not currently running games")
+                            self.log.info("No specific active game profile detected, but default profile updated for future games")
                             
                     except Exception as e:
-                        self.log.warning(f"Could not detect active profile: {e}, updating global config only")
+                        self.log.warning(f"Could not detect active profile: {e}, but still updating default profile")
+                        # Even if detection fails, make sure default profile gets updated
+                        default_profile_config = dict(config)
+                        for global_key in ["dll", "per_game_profiles"]:
+                            default_profile_config.pop(global_key, None)
+                        game_profiles["decky-lsfg-vk"] = ConfigurationManager.validate_config(default_profile_config)
                 
                 # Generate per-game TOML content
                 toml_content = ConfigurationManager.generate_per_game_toml_content(global_config, game_profiles)
@@ -366,11 +381,14 @@ class ConfigurationService(BaseService):
                 "from lsfg_vk.config_schema import ConfigurationManager",
                 "try:",
                 "    service = ConfigurationService()",
-                "    # Get current global config",
+                "    # Get the most recent configuration that reflects current UI state",
+                "    # This means getting the last configuration that was saved",
                 "    current = service.get_config()",
                 "    if current.get('success') and current.get('config'):",
-                "        config = current['config']",
+                "        # Use the current merged config as base for new profile",
+                "        config = dict(current['config'])",
                 "        config['per_game_profiles'] = True  # Ensure this stays on",
+                "        print(f'Creating profile with UI config: multiplier={config.get(\\\"multiplier\\\", \\\"unknown\\\")}')",
                 "        result = service.update_game_profile('$profile_name', config)",
                 "        if result.get('success'):",
                 "            print(f'Profile $profile_name created successfully')",
@@ -482,7 +500,7 @@ class ConfigurationService(BaseService):
         
         Args:
             game_name: Name of the game profile to update
-            config: Configuration data for the game
+            config: Configuration data for the game (this may contain current UI settings)
             
         Returns:
             ConfigurationResponse with success status
@@ -494,14 +512,39 @@ class ConfigurationService(BaseService):
             
             if self.config_file_path.exists():
                 content = self.config_file_path.read_text(encoding='utf-8')
-                global_config, game_profiles = ConfigurationManager.parse_per_game_toml_content(content)
+                existing_global, existing_profiles = ConfigurationManager.parse_per_game_toml_content(content)
+                global_config = existing_global
+                game_profiles = existing_profiles
             
-            # Update global config with dll and per_game_profiles setting
-            global_config["dll"] = config.get("dll", global_config["dll"])
-            global_config["per_game_profiles"] = config.get("per_game_profiles", False)
+            # Update global config with dll and per_game_profiles setting from the passed config
+            if "dll" in config:
+                global_config["dll"] = config["dll"]
+            global_config["per_game_profiles"] = config.get("per_game_profiles", True)
+            
+            # For the game profile, use the current global config as base (which includes current UI settings)
+            # but exclude dll (that stays global) and per_game_profiles (that's also global)
+            new_game_config = {}
+            for key, value in config.items():
+                if key not in ["dll", "per_game_profiles"]:
+                    new_game_config[key] = value
+            
+            # If this is a new profile and we don't have all settings in the passed config,
+            # fill in with current global values (which represent current UI state)
+            required_keys = ["multiplier", "flow_scale", "performance_mode", "hdr_mode", "experimental_present_mode"]
+            for key in required_keys:
+                if key not in new_game_config:
+                    # Use the current global value as fallback
+                    if key in global_config:
+                        new_game_config[key] = global_config[key]
+                    else:
+                        # Ultimate fallback to defaults
+                        defaults = ConfigurationManager.get_defaults()
+                        new_game_config[key] = defaults.get(key)
             
             # Update the specific game profile
-            game_profiles[game_name] = config
+            game_profiles[game_name] = ConfigurationManager.validate_config(new_game_config)
+            
+            self.log.info(f"Creating/updating profile '{game_name}' with config: {new_game_config}")
             
             # Generate new TOML content
             toml_content = ConfigurationManager.generate_per_game_toml_content(global_config, game_profiles)
