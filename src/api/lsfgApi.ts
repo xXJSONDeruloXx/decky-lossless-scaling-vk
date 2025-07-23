@@ -87,6 +87,48 @@ export interface FileContentResult {
   error?: string;
 }
 
+export interface FlatpakAppStatus {
+  id: string;
+  name: string;
+  installed: boolean;
+  needs_dll_override: boolean;
+  configured: boolean;
+  symlinks_exist: boolean;
+}
+
+export interface FlatpakStatusResult {
+  success: boolean;
+  flatpaks: FlatpakAppStatus[];
+  error?: string;
+}
+
+export interface FlatpakConfigResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+export interface FlatpakAppStatus {
+  id: string;
+  name: string;
+  installed: boolean;
+  needs_dll_override: boolean;
+  configured: boolean;
+  symlinks_exist: boolean;
+}
+
+export interface FlatpakStatusResult {
+  success: boolean;
+  flatpaks: FlatpakAppStatus[];
+  error?: string;
+}
+
+export interface FlatpakConfigResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
 // API functions
 export const installLsfgVk = callable<[], InstallationResult>("install_lsfg_vk");
 export const uninstallLsfgVk = callable<[], InstallationResult>("uninstall_lsfg_vk");
@@ -113,3 +155,8 @@ export const updateLsfgConfigFromObject = async (config: ConfigurationData): Pro
 // Self-updater API functions
 export const checkForPluginUpdate = callable<[], UpdateCheckResult>("check_for_plugin_update");
 export const downloadPluginUpdate = callable<[string], UpdateDownloadResult>("download_plugin_update");
+
+// Flatpak API functions
+export const getFlatpakStatus = callable<[], FlatpakStatusResult>("get_flatpak_status");
+export const configureFlatpak = callable<[string], FlatpakConfigResult>("configure_flatpak");
+export const removeFlatpakConfiguration = callable<[string], FlatpakConfigResult>("remove_flatpak_configuration");

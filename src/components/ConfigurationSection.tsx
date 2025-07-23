@@ -43,7 +43,7 @@ export function ConfigurationSection({
           description="Lowers internal motion estimation resolution, improving performance slightly"
           value={config.flow_scale}
           min={0.25}
-          max={1.0}
+          max={3.0}
           step={0.01}
           onChange={(value) => onConfigChange(FLOW_SCALE, value)}
         />

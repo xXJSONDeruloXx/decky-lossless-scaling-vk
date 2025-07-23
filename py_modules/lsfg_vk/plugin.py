@@ -18,6 +18,7 @@ from .installation import InstallationService
 from .dll_detection import DllDetectionService
 from .configuration import ConfigurationService
 from .config_schema import ConfigurationManager
+from .flatpak_service import FlatpakService
 
 
 class Plugin:
@@ -35,6 +36,7 @@ class Plugin:
         self.installation_service = InstallationService()
         self.dll_detection_service = DllDetectionService()
         self.configuration_service = ConfigurationService()
+        self.flatpak_service = FlatpakService()
 
     # Installation methods
     async def install_lsfg_vk(self) -> Dict[str, Any]:
@@ -209,6 +211,56 @@ class Plugin:
             ConfigurationResponse dict with success status
         """
         return self.configuration_service.update_dll_path(dll_path)
+
+    # Flatpak methods
+    async def get_flatpak_status(self) -> Dict[str, Any]:
+        """Get status of supported Flatpak applications.
+        
+        Returns:
+            Dict with success status and list of Flatpak apps with their configuration status
+        """
+        try:
+            if not self.flatpak_service.is_flatpak_available():
+                return {
+                    "success": False,
+                    "error": "Flatpak is not available on this system",
+                    "flatpaks": []
+                }
+            
+            flatpaks = self.flatpak_service.get_supported_flatpaks_status()
+            return {
+                "success": True,
+                "flatpaks": flatpaks
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "flatpaks": []
+            }
+    
+    async def configure_flatpak(self, app_id: str) -> Dict[str, Any]:
+        """Configure a Flatpak application for lsfg-vk usage.
+        
+        Args:
+            app_id: The Flatpak application ID to configure
+            
+        Returns:
+            Dict with success status and message/error
+        """
+        return self.flatpak_service.configure_flatpak(app_id)
+    
+    async def remove_flatpak_configuration(self, app_id: str) -> Dict[str, Any]:
+        """Remove lsfg-vk configuration from a Flatpak application.
+        
+        Args:
+            app_id: The Flatpak application ID to unconfigure
+            
+        Returns:
+            Dict with success status and message/error
+        """
+        return self.flatpak_service.remove_flatpak_configuration(app_id)
 
     # Self-updater methods
     async def check_for_plugin_update(self) -> Dict[str, Any]:

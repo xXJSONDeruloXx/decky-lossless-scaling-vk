@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { PanelSection, showModal, ButtonItem, PanelSectionRow } from "@decky/ui";
+import { FaCog } from "react-icons/fa";
 import { useInstallationStatus, useDllDetection, useLsfgConfig } from "../hooks/useLsfgHooks";
 import { useInstallationActions } from "../hooks/useInstallationActions";
 import { StatusDisplay } from "./StatusDisplay";
@@ -11,6 +12,7 @@ import { ClipboardButton } from "./ClipboardButton";
 import { SmartClipboardButton } from "./SmartClipboardButton";
 import { PluginUpdateChecker } from "./PluginUpdateChecker";
 import { NerdStuffModal } from "./NerdStuffModal";
+import { FlatpakModal } from "./FlatpakModal";
 import { ConfigurationData } from "../config/configSchema";
 
 export function Content() {
@@ -55,6 +57,10 @@ export function Content() {
     showModal(<NerdStuffModal />);
   };
 
+  const handleShowFlatpakManagement = () => {
+    showModal(<FlatpakModal />);
+  };
+
   return (
     <PanelSection>
       <InstallationButton
@@ -88,7 +94,22 @@ export function Content() {
       <ClipboardButton />
       
       {/* Plugin Update Checker */}
-      <PluginUpdateChecker />      {/* Nerd Stuff Button */}
+      <PluginUpdateChecker />
+      
+      {/* Flatpak Management Button */}
+      <PanelSectionRow>
+        <ButtonItem
+          layout="below"
+          onClick={handleShowFlatpakManagement}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <FaCog />
+            <div>Manage Flatpaks</div>
+          </div>
+        </ButtonItem>
+      </PanelSectionRow>
+
+      {/* Nerd Stuff Button */}
       <PanelSectionRow>
         <ButtonItem
           layout="below"

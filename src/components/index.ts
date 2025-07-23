@@ -9,3 +9,4 @@ export { SmartClipboardButton } from "./SmartClipboardButton";
 export { LaunchOptionInfo } from "./LaunchOptionInfo";
 export { PluginUpdateChecker } from "./PluginUpdateChecker";
 export { NerdStuffModal } from "./NerdStuffModal";
+export { FlatpakModal } from "./FlatpakModal";
