@@ -17,6 +17,7 @@ from pathlib import Path
 from .installation import InstallationService
 from .dll_detection import DllDetectionService
 from .configuration import ConfigurationService
+from .flatpak_service import FlatpakService
 from .config_schema import ConfigurationManager
 
 
@@ -35,6 +36,7 @@ class Plugin:
         self.installation_service = InstallationService()
         self.dll_detection_service = DllDetectionService()
         self.configuration_service = ConfigurationService()
+        self.flatpak_service = FlatpakService()
 
     # Installation methods
     async def install_lsfg_vk(self) -> Dict[str, Any]:
@@ -209,6 +211,67 @@ class Plugin:
             ConfigurationResponse dict with success status
         """
         return self.configuration_service.update_dll_path(dll_path)
+
+    # Flatpak methods
+    async def check_flatpak_extension_status(self) -> Dict[str, Any]:
+        """Check status of lsfg-vk Flatpak runtime extensions
+        
+        Returns:
+            FlatpakExtensionStatus dict with installation status for both runtime versions
+        """
+        return self.flatpak_service.get_extension_status()
+
+    async def install_flatpak_extension(self, version: str) -> Dict[str, Any]:
+        """Install lsfg-vk Flatpak runtime extension
+        
+        Args:
+            version: Runtime version to install ("23.08" or "24.08")
+            
+        Returns:
+            BaseResponse dict with success status and message/error
+        """
+        return self.flatpak_service.install_extension(version)
+
+    async def uninstall_flatpak_extension(self, version: str) -> Dict[str, Any]:
+        """Uninstall lsfg-vk Flatpak runtime extension
+        
+        Args:
+            version: Runtime version to uninstall ("23.08" or "24.08")
+            
+        Returns:
+            BaseResponse dict with success status and message/error
+        """
+        return self.flatpak_service.uninstall_extension(version)
+
+    async def get_flatpak_apps(self) -> Dict[str, Any]:
+        """Get list of installed Flatpak apps and their lsfg-vk override status
+        
+        Returns:
+            FlatpakAppInfo dict with apps list and override status
+        """
+        return self.flatpak_service.get_flatpak_apps()
+
+    async def set_flatpak_app_override(self, app_id: str) -> Dict[str, Any]:
+        """Set lsfg-vk overrides for a Flatpak app
+        
+        Args:
+            app_id: Flatpak application ID
+            
+        Returns:
+            FlatpakOverrideResponse dict with operation result
+        """
+        return self.flatpak_service.set_app_override(app_id)
+
+    async def remove_flatpak_app_override(self, app_id: str) -> Dict[str, Any]:
+        """Remove lsfg-vk overrides for a Flatpak app
+        
+        Args:
+            app_id: Flatpak application ID
+            
+        Returns:
+            FlatpakOverrideResponse dict with operation result
+        """
+        return self.flatpak_service.remove_app_override(app_id)
 
     # Self-updater methods
     async def check_for_plugin_update(self) -> Dict[str, Any]:

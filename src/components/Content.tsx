@@ -11,6 +11,7 @@ import { ClipboardButton } from "./ClipboardButton";
 import { SmartClipboardButton } from "./SmartClipboardButton";
 import { PluginUpdateChecker } from "./PluginUpdateChecker";
 import { NerdStuffModal } from "./NerdStuffModal";
+import { FlatpaksModal } from "./index";
 import { ConfigurationData } from "../config/configSchema";
 
 export function Content() {
@@ -55,6 +56,10 @@ export function Content() {
     showModal(<NerdStuffModal />);
   };
 
+  const handleShowFlatpaks = () => {
+    showModal(<FlatpaksModal />);
+  };
+
   return (
     <PanelSection>
       <InstallationButton
@@ -95,6 +100,16 @@ export function Content() {
           onClick={handleShowNerdStuff}
         >
           Nerd Stuff
+        </ButtonItem>
+      </PanelSectionRow>
+
+      {/* Flatpaks Button */}
+      <PanelSectionRow>
+        <ButtonItem
+          layout="below"
+          onClick={handleShowFlatpaks}
+        >
+          Flatpaks
         </ButtonItem>
       </PanelSectionRow>
     </PanelSection>

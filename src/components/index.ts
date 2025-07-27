@@ -8,3 +8,4 @@ export { WikiButton } from "./WikiButton";
 export { SmartClipboardButton } from "./SmartClipboardButton";
 export { PluginUpdateChecker } from "./PluginUpdateChecker";
 export { NerdStuffModal } from "./NerdStuffModal";
+export { default as FlatpaksModal } from "./FlatpaksModal";
