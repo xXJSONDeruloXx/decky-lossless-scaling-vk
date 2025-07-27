@@ -302,11 +302,13 @@ class FlatpakService(BaseService):
             home_path = os.path.expanduser("~")
             config_path = f"{home_path}/.config/lsfg-vk"
             
-            # Check for filesystem override
-            filesystem_override = f"--filesystem={config_path}:rw" in output
+            # Check for filesystem override in the [Context] section
+            # Format: filesystems=/home/kurt/.config/lsfg-vk;
+            filesystem_override = f"filesystems={config_path}" in output
             
-            # Check for environment override
-            env_override = f"--env=LSFG_CONFIG={config_path}/conf.toml" in output
+            # Check for environment override in the [Environment] section
+            # Format: LSFG_CONFIG=/home/kurt/.config/lsfg-vk/conf.toml
+            env_override = f"LSFG_CONFIG={config_path}/conf.toml" in output
             
             return {"filesystem": filesystem_override, "env": env_override}
             
