@@ -46,8 +46,8 @@ class FlatpakService(BaseService):
     
     def __init__(self, logger=None):
         super().__init__(logger)
-        self.extension_id_23_08 = "org.freedesktop.Platform.VulkanLayer.lsfg_vk/x86_64/23.08"
-        self.extension_id_24_08 = "org.freedesktop.Platform.VulkanLayer.lsfg_vk/x86_64/24.08"
+        self.extension_id_23_08 = "org.freedesktop.Platform.VulkanLayer.lsfgvk/x86_64/23.08"
+        self.extension_id_24_08 = "org.freedesktop.Platform.VulkanLayer.lsfgvk/x86_64/24.08"
         self.flatpak_command = None  # Will be set when flatpak is detected
     
     def _get_clean_env(self):
@@ -141,8 +141,18 @@ class FlatpakService(BaseService):
             )
             
             installed_runtimes = result.stdout
-            installed_23_08 = self.extension_id_23_08 in installed_runtimes
-            installed_24_08 = self.extension_id_24_08 in installed_runtimes
+            
+            # Check for both versions by looking for the base extension name and version
+            base_extension_name = "org.freedesktop.Platform.VulkanLayer.lsfgvk"
+            installed_23_08 = False
+            installed_24_08 = False
+            
+            for line in installed_runtimes.split('\n'):
+                if base_extension_name in line:
+                    if "23.08" in line:
+                        installed_23_08 = True
+                    elif "24.08" in line:
+                        installed_24_08 = True
             
             status_msg = []
             if installed_23_08:
