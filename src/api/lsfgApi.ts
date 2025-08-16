@@ -55,6 +55,8 @@ export interface ConfigSchemaResult {
   field_names: string[];
   field_types: Record<string, string>;
   defaults: ConfigurationData;
+  profiles?: string[];
+  current_profile?: string;
 }
 
 export interface UpdateCheckResult {
@@ -87,6 +89,22 @@ export interface FileContentResult {
   error?: string;
 }
 
+// Profile management interfaces
+export interface ProfilesResult {
+  success: boolean;
+  profiles?: string[];
+  current_profile?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface ProfileResult {
+  success: boolean;
+  profile_name?: string;
+  message?: string;
+  error?: string;
+}
+
 // API functions
 export const installLsfgVk = callable<[], InstallationResult>("install_lsfg_vk");
 export const uninstallLsfgVk = callable<[], InstallationResult>("uninstall_lsfg_vk");
@@ -113,3 +131,11 @@ export const updateLsfgConfigFromObject = async (config: ConfigurationData): Pro
 // Self-updater API functions
 export const checkForPluginUpdate = callable<[], UpdateCheckResult>("check_for_plugin_update");
 export const downloadPluginUpdate = callable<[string], UpdateDownloadResult>("download_plugin_update");
+
+// Profile management API functions
+export const getProfiles = callable<[], ProfilesResult>("get_profiles");
+export const createProfile = callable<[string, string?], ProfileResult>("create_profile");
+export const deleteProfile = callable<[string], ProfileResult>("delete_profile");
+export const renameProfile = callable<[string, string], ProfileResult>("rename_profile");
+export const setCurrentProfile = callable<[string], ProfileResult>("set_current_profile");
+export const updateProfileConfig = callable<[string, ConfigurationData], ConfigUpdateResult>("update_profile_config");

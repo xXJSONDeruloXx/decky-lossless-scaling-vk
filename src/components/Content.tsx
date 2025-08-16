@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { PanelSection, showModal, ButtonItem, PanelSectionRow } from "@decky/ui";
 import { useInstallationStatus, useDllDetection, useLsfgConfig } from "../hooks/useLsfgHooks";
+import { useProfileManagement } from "../hooks/useProfileManagement";
 import { useInstallationActions } from "../hooks/useInstallationActions";
 import { StatusDisplay } from "./StatusDisplay";
 import { InstallationButton } from "./InstallationButton";
 import { ConfigurationSection } from "./ConfigurationSection";
+import { ProfileManagement } from "./ProfileManagement";
 import { UsageInstructions } from "./UsageInstructions";
 import { WikiButton } from "./WikiButton";
 import { ClipboardButton } from "./ClipboardButton";
@@ -29,6 +31,12 @@ export function Content() {
     updateField
   } = useLsfgConfig();
 
+  const {
+    currentProfile,
+    updateProfileConfig,
+    loadProfiles
+  } = useProfileManagement();
+
   const { isInstalling, isUninstalling, handleInstall, handleUninstall } = useInstallationActions();
 
   // Reload config when installation status changes
@@ -40,7 +48,18 @@ export function Content() {
 
   // Generic configuration change handler
   const handleConfigChange = async (fieldName: keyof ConfigurationData, value: boolean | number | string) => {
-    await updateField(fieldName, value);
+    // If we have a current profile, update that profile specifically
+    if (currentProfile) {
+      const newConfig = { ...config, [fieldName]: value };
+      const result = await updateProfileConfig(currentProfile, newConfig);
+      if (result.success) {
+        // Reload config to reflect the changes from the backend
+        await loadLsfgConfig();
+      }
+    } else {
+      // Fallback to the original method for backward compatibility
+      await updateField(fieldName, value);
+    }
   };
 
   const onInstall = () => {
@@ -73,6 +92,17 @@ export function Content() {
       />
       
       <SmartClipboardButton />
+
+      {/* Profile Management - only show if installed */}
+      {isInstalled && (
+        <ProfileManagement
+          currentProfile={currentProfile}
+          onProfileChange={async () => {
+            await loadProfiles();
+            await loadLsfgConfig();
+          }}
+        />
+      )}
 
       {/* Configuration Section - only show if installed */}
       {isInstalled && (

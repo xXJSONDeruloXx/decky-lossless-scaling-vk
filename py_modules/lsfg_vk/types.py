@@ -2,7 +2,7 @@
 Type definitions for the lsfg-vk plugin responses.
 """
 
-from typing import TypedDict, Optional, List
+from typing import TypedDict, Optional, List, Dict, Any
 from .config_schema import ConfigurationData
 
 
@@ -58,5 +58,26 @@ class DllDetectionResponse(TypedDict):
 class ConfigurationResponse(BaseResponse):
     """Response for configuration operations"""
     config: Optional[ConfigurationData]
+    message: Optional[str]
+    error: Optional[str]
+
+
+class ProfileConfig(TypedDict):
+    """Configuration for a single profile"""
+    exe: str
+    config: ConfigurationData
+
+
+class ProfilesResponse(BaseResponse):
+    """Response for profile operations"""
+    profiles: Optional[List[str]]
+    current_profile: Optional[str]
+    message: Optional[str]
+    error: Optional[str]
+
+
+class ProfileResponse(BaseResponse):
+    """Response for single profile operations"""
+    profile_name: Optional[str]
     message: Optional[str]
     error: Optional[str]

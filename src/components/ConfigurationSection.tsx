@@ -113,14 +113,14 @@ export function ConfigurationSection({
         />
       </PanelSectionRow>
 
-      <PanelSectionRow>
+      {/* <PanelSectionRow>
         <ToggleField
           label="Force Disable FP16"
           description="Force-disable FP16 acceleration"
           checked={config.no_fp16}
           onChange={(value) => onConfigChange(NO_FP16, value)}
         />
-      </PanelSectionRow>
+      </PanelSectionRow> */}
 
       <PanelSectionRow>
         <ToggleField

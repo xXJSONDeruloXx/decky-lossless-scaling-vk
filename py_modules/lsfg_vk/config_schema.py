@@ -10,7 +10,7 @@ This module defines the complete configuration structure for lsfg-vk, managing T
 
 import re
 import sys
-from typing import TypedDict, Dict, Any, Union, cast
+from typing import TypedDict, Dict, Any, Union, cast, List
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -74,8 +74,19 @@ COMPLETE_CONFIG_SCHEMA = {**CONFIG_SCHEMA, **SCRIPT_ONLY_FIELDS}
 # Import auto-generated configuration components
 from .config_schema_generated import ConfigurationData, get_script_parsing_logic, get_script_generation_logic
 
+# Constants for profile management
+DEFAULT_PROFILE_NAME = "decky-lsfg-vk"
+GLOBAL_SECTION_FIELDS = {"dll", "no_fp16"}
+
 # Note: ConfigurationData is now imported from generated file
 # No need to manually maintain the TypedDict anymore!
+
+
+class ProfileData(TypedDict):
+    """Profile data with current profile tracking"""
+    current_profile: str
+    profiles: Dict[str, ConfigurationData]  # profile_name -> config
+    global_config: Dict[str, Any]  # Global settings (dll, no_fp16)
 
 
 class ConfigurationManager:
@@ -163,58 +174,103 @@ class ConfigurationManager:
     
     @staticmethod
     def generate_toml_content(config: ConfigurationData) -> str:
-        """Generate TOML configuration file content using the new game-specific format"""
+        """Generate TOML configuration file content for single profile (backward compatibility)"""
+        # For backward compatibility, create a single profile structure
+        profile_data: ProfileData = {
+            "current_profile": DEFAULT_PROFILE_NAME,
+            "profiles": {DEFAULT_PROFILE_NAME: config},
+            "global_config": {
+                "dll": config.get("dll", ""),
+                "no_fp16": config.get("no_fp16", False)
+            }
+        }
+        return ConfigurationManager.generate_toml_content_multi_profile(profile_data)
+    
+    @staticmethod
+    def generate_toml_content_multi_profile(profile_data: ProfileData) -> str:
+        """Generate TOML configuration file content with multiple profiles"""
         lines = ["version = 1"]
         lines.append("")
         
         # Add global section with global fields
         lines.append("[global]")
         
+        # Add current_profile field
+        lines.append(f"# Currently selected profile")
+        lines.append(f'current_profile = "{profile_data["current_profile"]}"')
+        lines.append("")
+        
         # Add dll field if specified
-        if config.get("dll"):
+        dll_path = profile_data["global_config"].get("dll", "")
+        if dll_path:
             lines.append(f"# specify where Lossless.dll is stored")
-            from .config_schema_generated import DLL
-            lines.append(f'dll = "{config[DLL]}"')
+            lines.append(f'dll = "{dll_path}"')
         
         # Add no_fp16 field
-        from .config_schema_generated import NO_FP16
+        no_fp16 = profile_data["global_config"].get("no_fp16", False)
         lines.append(f"# force-disable fp16 (use on older nvidia cards)")
-        lines.append(f"no_fp16 = {str(config[NO_FP16]).lower()}")
+        lines.append(f"no_fp16 = {str(no_fp16).lower()}")
         lines.append("")
         
-        # Add game section with process name for LSFG_PROCESS approach
-        lines.append("[[game]]")
-        lines.append("# Plugin-managed game entry (uses LSFG_PROCESS=decky-lsfg-vk)")
-        lines.append('exe = "decky-lsfg-vk"')
-        lines.append("")
+        # Add game sections for each profile
+        # Sort profiles to ensure consistent order (default profile first)
+        sorted_profiles = sorted(profile_data["profiles"].items(), 
+                               key=lambda x: (x[0] != DEFAULT_PROFILE_NAME, x[0]))
         
-        # Add all configuration fields to the game section
-        for field_name, field_def in CONFIG_SCHEMA.items():
-            # Skip global fields - they go in global section
-            if field_name in ("dll", "no_fp16"):
-                continue
+        for profile_name, config in sorted_profiles:
+            lines.append("[[game]]")
+            if profile_name == DEFAULT_PROFILE_NAME:
+                lines.append("# Plugin-managed game entry (default profile)")
+            else:
+                lines.append(f"# Profile: {profile_name}")
+            lines.append(f'exe = "{profile_name}"')
+            lines.append("")
+            
+            # Add all configuration fields to the game section (excluding global fields)
+            for field_name, field_def in CONFIG_SCHEMA.items():
+                # Skip global fields - they go in global section
+                if field_name in GLOBAL_SECTION_FIELDS:
+                    continue
+                    
+                value = config.get(field_name, field_def.default)
                 
-            value = config[field_name]
-            
-            # Add field description comment
-            lines.append(f"# {field_def.description}")
-            
-            # Format value based on type
-            if isinstance(value, bool):
-                lines.append(f"{field_name} = {str(value).lower()}")
-            elif isinstance(value, str) and value:  # Only add non-empty strings
-                lines.append(f'{field_name} = "{value}"')
-            elif isinstance(value, (int, float)):  # Always include numbers, even if 0 or 1
-                lines.append(f"{field_name} = {value}")
-            
-            lines.append("")  # Empty line for readability
+                # Add field description comment
+                lines.append(f"# {field_def.description}")
+                
+                # Format value based on type
+                if isinstance(value, bool):
+                    lines.append(f"{field_name} = {str(value).lower()}")
+                elif isinstance(value, str) and value:  # Only add non-empty strings
+                    lines.append(f'{field_name} = "{value}"')
+                elif isinstance(value, (int, float)):  # Always include numbers, even if 0 or 1
+                    lines.append(f"{field_name} = {value}")
+                
+                lines.append("")  # Empty line for readability
         
         return "\n".join(lines)
     
     @staticmethod
     def parse_toml_content(content: str) -> ConfigurationData:
-        """Parse TOML content into configuration data using simple regex parsing"""
-        config = ConfigurationManager.get_defaults()
+        """Parse TOML content into configuration data for the currently selected profile (backward compatibility)"""
+        profile_data = ConfigurationManager.parse_toml_content_multi_profile(content)
+        current_profile = profile_data["current_profile"]
+        
+        # Merge global config with current profile config
+        current_config = profile_data["profiles"].get(current_profile, ConfigurationManager.get_defaults())
+        
+        # Add global fields to the config
+        for field_name in GLOBAL_SECTION_FIELDS:
+            if field_name in profile_data["global_config"]:
+                current_config[field_name] = profile_data["global_config"][field_name]
+        
+        return current_config
+    
+    @staticmethod
+    def parse_toml_content_multi_profile(content: str) -> ProfileData:
+        """Parse TOML content into profile data structure"""
+        profiles: Dict[str, ConfigurationData] = {}
+        global_config: Dict[str, Any] = {}
+        current_profile = DEFAULT_PROFILE_NAME
         
         try:
             # Look for both [global] and [[game]] sections
@@ -222,6 +278,7 @@ class ConfigurationManager:
             in_global_section = False
             in_game_section = False
             current_game_exe = None
+            current_game_config: Dict[str, Any] = {}
             
             for line in lines:
                 line = line.strip()
@@ -232,6 +289,29 @@ class ConfigurationManager:
                 
                 # Check for section headers
                 if line.startswith('[') and line.endswith(']'):
+                    # Save previous game section if we were in one
+                    if in_game_section and current_game_exe:
+                        # Validate and store the profile config
+                        validated_config = ConfigurationManager.get_defaults()
+                        for key, value in current_game_config.items():
+                            if key in CONFIG_SCHEMA:
+                                field_def = CONFIG_SCHEMA[key]
+                                try:
+                                    if field_def.field_type == ConfigFieldType.BOOLEAN:
+                                        validated_config[key] = value
+                                    elif field_def.field_type == ConfigFieldType.INTEGER:
+                                        validated_config[key] = int(value) if not isinstance(value, int) else value
+                                    elif field_def.field_type == ConfigFieldType.FLOAT:
+                                        validated_config[key] = float(value) if not isinstance(value, float) else value
+                                    elif field_def.field_type == ConfigFieldType.STRING:
+                                        validated_config[key] = str(value)
+                                except (ValueError, TypeError):
+                                    # If conversion fails, keep default value
+                                    pass
+                        profiles[current_game_exe] = validated_config
+                        current_game_config = {}
+                    
+                    # Set new section state
                     if line == '[global]':
                         in_global_section = True
                         in_game_section = False
@@ -256,42 +336,79 @@ class ConfigurationManager:
                     elif value.startswith("'") and value.endswith("'"):
                         value = value[1:-1]
                     
-                    # Handle global section (dll and no_fp16) - USE GENERATED CONSTANTS
+                    # Handle global section
                     if in_global_section:
-                        if key == "dll":
-                            from .config_schema_generated import DLL
-                            config[DLL] = value
+                        if key == "current_profile":
+                            current_profile = value
+                        elif key == "dll":
+                            global_config["dll"] = value
                         elif key == "no_fp16":
-                            from .config_schema_generated import NO_FP16
-                            config[NO_FP16] = value.lower() in ('true', '1', 'yes', 'on')
+                            global_config["no_fp16"] = value.lower() in ('true', '1', 'yes', 'on')
                     
                     # Handle game section
                     elif in_game_section:
                         # Track the exe for this game section
                         if key == "exe":
                             current_game_exe = value
-                        # Only parse config for our plugin-managed game entry
-                        elif current_game_exe == "decky-lsfg-vk" and key in CONFIG_SCHEMA:
+                        # Store config fields for current game
+                        elif key in CONFIG_SCHEMA:
                             field_def = CONFIG_SCHEMA[key]
                             try:
                                 if field_def.field_type == ConfigFieldType.BOOLEAN:
-                                    config[key] = value.lower() in ('true', '1', 'yes', 'on')
+                                    current_game_config[key] = value.lower() in ('true', '1', 'yes', 'on')
                                 elif field_def.field_type == ConfigFieldType.INTEGER:
-                                    parsed_value = int(value)
-                                    config[key] = parsed_value
+                                    current_game_config[key] = int(value)
                                 elif field_def.field_type == ConfigFieldType.FLOAT:
-                                    config[key] = float(value)
+                                    current_game_config[key] = float(value)
                                 elif field_def.field_type == ConfigFieldType.STRING:
-                                    config[key] = value
+                                    current_game_config[key] = value
                             except (ValueError, TypeError):
                                 # If conversion fails, keep default value
                                 pass
             
-            return config
+            # Handle final game section if we were in one
+            if in_game_section and current_game_exe:
+                validated_config = ConfigurationManager.get_defaults()
+                for key, value in current_game_config.items():
+                    if key in CONFIG_SCHEMA:
+                        field_def = CONFIG_SCHEMA[key]
+                        try:
+                            if field_def.field_type == ConfigFieldType.BOOLEAN:
+                                validated_config[key] = value
+                            elif field_def.field_type == ConfigFieldType.INTEGER:
+                                validated_config[key] = int(value) if not isinstance(value, int) else value
+                            elif field_def.field_type == ConfigFieldType.FLOAT:
+                                validated_config[key] = float(value) if not isinstance(value, float) else value
+                            elif field_def.field_type == ConfigFieldType.STRING:
+                                validated_config[key] = str(value)
+                        except (ValueError, TypeError):
+                            # If conversion fails, keep default value
+                            pass
+                profiles[current_game_exe] = validated_config
+            
+            # Ensure we have at least the default profile
+            if not profiles:
+                profiles[DEFAULT_PROFILE_NAME] = ConfigurationManager.get_defaults()
+            
+            # Ensure current_profile exists in profiles
+            if current_profile not in profiles:
+                current_profile = DEFAULT_PROFILE_NAME
+                if DEFAULT_PROFILE_NAME not in profiles:
+                    profiles[DEFAULT_PROFILE_NAME] = ConfigurationManager.get_defaults()
+            
+            return ProfileData(
+                current_profile=current_profile,
+                profiles=profiles,
+                global_config=global_config
+            )
             
         except Exception:
-            # If parsing fails completely, return defaults
-            return ConfigurationManager.get_defaults()
+            # If parsing fails completely, return default profile structure
+            return ProfileData(
+                current_profile=DEFAULT_PROFILE_NAME,
+                profiles={DEFAULT_PROFILE_NAME: ConfigurationManager.get_defaults()},
+                global_config={}
+            )
     
     @staticmethod
     def parse_script_content(script_content: str) -> Dict[str, Union[bool, int, str]]:
@@ -333,3 +450,124 @@ class ConfigurationManager:
         """Create configuration from keyword arguments - USES GENERATED CODE"""
         from .config_schema_generated import create_config_dict
         return create_config_dict(**kwargs)
+    
+    @staticmethod
+    def validate_profile_name(profile_name: str) -> bool:
+        """Validate profile name for safety"""
+        if not profile_name:
+            return False
+        
+        # Check for invalid characters that could cause issues in shell scripts or TOML
+        invalid_chars = set(' \t\n\r\'"\\/$|&;()<>{}[]`*?')
+        if any(char in invalid_chars for char in profile_name):
+            return False
+        
+        # Check for reserved names
+        reserved_names = {'global', 'game', 'current_profile'}
+        if profile_name.lower() in reserved_names:
+            return False
+        
+        return True
+    
+    @staticmethod
+    def create_profile(profile_data: ProfileData, profile_name: str, source_profile: str = None) -> ProfileData:
+        """Create a new profile by copying from source profile or defaults"""
+        if not ConfigurationManager.validate_profile_name(profile_name):
+            raise ValueError(f"Invalid profile name: {profile_name}")
+        
+        if profile_name in profile_data["profiles"]:
+            raise ValueError(f"Profile '{profile_name}' already exists")
+        
+        # Copy from source profile or use defaults
+        if source_profile and source_profile in profile_data["profiles"]:
+            new_config = dict(profile_data["profiles"][source_profile])
+        else:
+            new_config = ConfigurationManager.get_defaults()
+        
+        # Create new profile data structure
+        new_profile_data = ProfileData(
+            current_profile=profile_data["current_profile"],
+            profiles=dict(profile_data["profiles"]),
+            global_config=dict(profile_data["global_config"])
+        )
+        new_profile_data["profiles"][profile_name] = new_config
+        
+        return new_profile_data
+    
+    @staticmethod
+    def delete_profile(profile_data: ProfileData, profile_name: str) -> ProfileData:
+        """Delete a profile (cannot delete default profile)"""
+        if profile_name == DEFAULT_PROFILE_NAME:
+            raise ValueError(f"Cannot delete default profile '{DEFAULT_PROFILE_NAME}'")
+        
+        if profile_name not in profile_data["profiles"]:
+            raise ValueError(f"Profile '{profile_name}' does not exist")
+        
+        # Create new profile data structure
+        new_profile_data = ProfileData(
+            current_profile=profile_data["current_profile"],
+            profiles=dict(profile_data["profiles"]),
+            global_config=dict(profile_data["global_config"])
+        )
+        
+        # Remove the profile
+        del new_profile_data["profiles"][profile_name]
+        
+        # If we deleted the current profile, switch to default
+        if new_profile_data["current_profile"] == profile_name:
+            new_profile_data["current_profile"] = DEFAULT_PROFILE_NAME
+            # Ensure default profile exists
+            if DEFAULT_PROFILE_NAME not in new_profile_data["profiles"]:
+                new_profile_data["profiles"][DEFAULT_PROFILE_NAME] = ConfigurationManager.get_defaults()
+        
+        return new_profile_data
+    
+    @staticmethod
+    def rename_profile(profile_data: ProfileData, old_name: str, new_name: str) -> ProfileData:
+        """Rename a profile"""
+        if old_name == DEFAULT_PROFILE_NAME:
+            raise ValueError(f"Cannot rename default profile '{DEFAULT_PROFILE_NAME}'")
+        
+        if not ConfigurationManager.validate_profile_name(new_name):
+            raise ValueError(f"Invalid profile name: {new_name}")
+        
+        if old_name not in profile_data["profiles"]:
+            raise ValueError(f"Profile '{old_name}' does not exist")
+        
+        if new_name in profile_data["profiles"]:
+            raise ValueError(f"Profile '{new_name}' already exists")
+        
+        # Create new profile data structure
+        new_profile_data = ProfileData(
+            current_profile=profile_data["current_profile"],
+            profiles={},
+            global_config=dict(profile_data["global_config"])
+        )
+        
+        # Copy profiles with new name
+        for profile_name, config in profile_data["profiles"].items():
+            if profile_name == old_name:
+                new_profile_data["profiles"][new_name] = dict(config)
+            else:
+                new_profile_data["profiles"][profile_name] = dict(config)
+        
+        # Update current_profile if necessary
+        if new_profile_data["current_profile"] == old_name:
+            new_profile_data["current_profile"] = new_name
+        
+        return new_profile_data
+    
+    @staticmethod
+    def set_current_profile(profile_data: ProfileData, profile_name: str) -> ProfileData:
+        """Set the current active profile"""
+        if profile_name not in profile_data["profiles"]:
+            raise ValueError(f"Profile '{profile_name}' does not exist")
+        
+        # Create new profile data structure
+        new_profile_data = ProfileData(
+            current_profile=profile_name,
+            profiles=dict(profile_data["profiles"]),
+            global_config=dict(profile_data["global_config"])
+        )
+        
+        return new_profile_data

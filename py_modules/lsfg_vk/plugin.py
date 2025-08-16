@@ -176,13 +176,37 @@ class Plugin:
         """Get configuration schema information for frontend
         
         Returns:
-            Dict with field names, types, and defaults
+            Dict with field names, types, defaults, and profile information
         """
-        return {
-            "field_names": ConfigurationManager.get_field_names(),
-            "field_types": {name: field_type.value for name, field_type in ConfigurationManager.get_field_types().items()},
-            "defaults": ConfigurationManager.get_defaults()
-        }
+        try:
+            # Get profile information
+            profiles_response = self.configuration_service.get_profiles()
+            
+            schema_data = {
+                "field_names": ConfigurationManager.get_field_names(),
+                "field_types": {name: field_type.value for name, field_type in ConfigurationManager.get_field_types().items()},
+                "defaults": ConfigurationManager.get_defaults()
+            }
+            
+            # Add profile information if available
+            if profiles_response.get("success"):
+                schema_data["profiles"] = profiles_response.get("profiles", [])
+                schema_data["current_profile"] = profiles_response.get("current_profile")
+            else:
+                schema_data["profiles"] = ["decky-lsfg-vk"]
+                schema_data["current_profile"] = "decky-lsfg-vk"
+            
+            return schema_data
+            
+        except Exception:
+            # Fallback to basic schema without profile info
+            return {
+                "field_names": ConfigurationManager.get_field_names(),
+                "field_types": {name: field_type.value for name, field_type in ConfigurationManager.get_field_types().items()},
+                "defaults": ConfigurationManager.get_defaults(),
+                "profiles": ["decky-lsfg-vk"],
+                "current_profile": "decky-lsfg-vk"
+            }
 
     async def update_lsfg_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Update lsfg TOML configuration using object-based API (single source of truth)
@@ -209,6 +233,76 @@ class Plugin:
             ConfigurationResponse dict with success status
         """
         return self.configuration_service.update_dll_path(dll_path)
+
+    # Profile management methods
+    async def get_profiles(self) -> Dict[str, Any]:
+        """Get list of all profiles and current profile
+        
+        Returns:
+            ProfilesResponse dict with profile list and current profile
+        """
+        return self.configuration_service.get_profiles()
+
+    async def create_profile(self, profile_name: str, source_profile: str = None) -> Dict[str, Any]:
+        """Create a new profile
+        
+        Args:
+            profile_name: Name for the new profile
+            source_profile: Optional source profile to copy from (default: current profile)
+            
+        Returns:
+            ProfileResponse dict with success status
+        """
+        return self.configuration_service.create_profile(profile_name, source_profile)
+
+    async def delete_profile(self, profile_name: str) -> Dict[str, Any]:
+        """Delete a profile
+        
+        Args:
+            profile_name: Name of the profile to delete
+            
+        Returns:
+            ProfileResponse dict with success status
+        """
+        return self.configuration_service.delete_profile(profile_name)
+
+    async def rename_profile(self, old_name: str, new_name: str) -> Dict[str, Any]:
+        """Rename a profile
+        
+        Args:
+            old_name: Current profile name
+            new_name: New profile name
+            
+        Returns:
+            ProfileResponse dict with success status
+        """
+        return self.configuration_service.rename_profile(old_name, new_name)
+
+    async def set_current_profile(self, profile_name: str) -> Dict[str, Any]:
+        """Set the current active profile
+        
+        Args:
+            profile_name: Name of the profile to set as current
+            
+        Returns:
+            ProfileResponse dict with success status
+        """
+        return self.configuration_service.set_current_profile(profile_name)
+
+    async def update_profile_config(self, profile_name: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Update configuration for a specific profile
+        
+        Args:
+            profile_name: Name of the profile to update
+            config: Configuration data dictionary containing settings
+            
+        Returns:
+            ConfigurationResponse dict with success status
+        """
+        # Validate and extract configuration from the config dict
+        validated_config = ConfigurationManager.validate_config(config)
+        
+        return self.configuration_service.update_profile_config(profile_name, validated_config)
 
     # Self-updater methods
     async def check_for_plugin_update(self) -> Dict[str, Any]:
