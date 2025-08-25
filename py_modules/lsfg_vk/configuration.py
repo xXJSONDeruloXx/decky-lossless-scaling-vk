@@ -196,9 +196,19 @@ class ConfigurationService(BaseService):
         generate_script_lines = get_script_generation_logic()
         lines.extend(generate_script_lines(config))
         
-        # Always add the LSFG_PROCESS export and execution line
+        # Add LSFG_PROCESS export with override support
         lines.extend([
-            "export LSFG_PROCESS=decky-lsfg-vk",
+            "",
+            "# Check if script was called with override syntax (e.g., ~/lsfg=profile_name)",
+            "if [[ \"$0\" == *\"=\"* ]]; then",
+            "    # Extract override value from script name",
+            "    OVERRIDE_PROCESS=\"${0##*=}\"",
+            "    export LSFG_PROCESS=\"$OVERRIDE_PROCESS\"",
+            "else",
+            "    # Use default profile",
+            "    export LSFG_PROCESS=decky-lsfg-vk",
+            "fi",
+            "",
             'exec "$@"'
         ])
         
@@ -232,11 +242,22 @@ class ConfigurationService(BaseService):
         generate_script_lines = get_script_generation_logic()
         lines.extend(generate_script_lines(merged_config))
         
-        # Export LSFG_PROCESS with current profile name
-        lines.extend([
-            f"export LSFG_PROCESS={current_profile}",
+        # Add LSFG_PROCESS export with override support
+        override_logic = [
+            "",
+            "# Check if script was called with override syntax (e.g., ~/lsfg=profile_name)",
+            "if [[ \"$0\" == *\"=\"* ]]; then",
+            "    # Extract override value from script name",
+            "    OVERRIDE_PROCESS=\"${0##*=}\"",
+            "    export LSFG_PROCESS=\"$OVERRIDE_PROCESS\"",
+            "else",
+            "    # Use current profile as default",
+            f"    export LSFG_PROCESS={current_profile}",
+            "fi",
+            "",
             'exec "$@"'
-        ])
+        ]
+        lines.extend(override_logic)
         
         return "\n".join(lines) + "\n"
     
